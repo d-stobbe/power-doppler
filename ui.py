@@ -1,46 +1,20 @@
 from ipywidgets import IntSlider, FloatSlider, interactive_output, Output, Layout, HBox, VBox, Dropdown, Button, ToggleButtons
 from IPython.display import display
-import matplotlib as plt
+import matplotlib.pyplot as plt
+import numpy as np
 
 from preprocessing import standardSVD, randomSVD, adaptiveSVD, reconstructSVD
 from visualization import makeBmode, makeFlow, plotBlood, plotPowerDoppler
 
-bloodOut = Output()
-powerDopplerOut = Output()
-standardSVDOutput = Output()
 
 def power2D(rawImages):
+    
+    bloodOut = Output()
+    powerDopplerOut = Output()
+    standardSVDOutput = Output()
+
     shape = rawImages.shape
     U, S, Vh = standardSVD(rawImages)
-    def update(tissue_threshold, noise_threshold, maxMag, minMag, sigma, svdMode):
-        if svdMode == 'Standard':
-            standInputs.layout.display = 'flex'
-            randInputs.layout.display = 'none'
-            adaptiveInputs.layout.display = 'none'
-        elif svdMode == 'Random':
-            standInputs.layout.display = 'none'
-            randInputs.layout.display = 'flex'
-            adaptiveInputs.layout.display = 'none'
-        else:
-            standInputs.layout.display = 'none'
-            randInputs.layout.display = 'none'
-            adaptiveInputs.layout.display = 'flex'
-        with bloodOut:
-            bloodOut.clear_output(wait=True)
-            plt.figure(figsize=(5, 5))
-            filteredImages = reconstructSVD(U, S, Vh, tissue_threshold, noise_threshold, shape)
-            plt.title('Filtered Blood Signal')
-            plt.imshow(makeFlow(filteredImages[0:16], maxMag, 0, sigma))
-            plt.show()
-        with powerDopplerOut:
-            powerDopplerOut.clear_output(wait=True)
-            bmodeArray = makeBmode(rawImages)
-            plt.figure(figsize=(5, 5))
-            plt.title('Power Doppler')
-            plt.imshow(bmodeArray, cmap='grey')
-            rgbaFlow = makeFlow(filteredImages[0:16], maxMag, minMag, sigma)
-            plt.imshow(rgbaFlow)
-            plt.show()
 
     tissueSlider = IntSlider(
         min=0, max=256, step=1, value=0,
@@ -145,9 +119,6 @@ def power2D(rawImages):
         style={'description_width': '130px'}
     )
 
-
-    interactive_output(update, {'tissue_threshold': tissueSlider, 'noise_threshold': noiseSlider, 'maxMag': maxPowerSlider, 'minMag': minPowerSlider, 'sigma':sigmaSlider, 'svdMode':svdSelector})
-
     standInputs = VBox([standardSVDOutput, tissueSlider, noiseSlider, sigmaSlider, maxPowerSlider])
 
     randInputs = VBox([randomK, randomIters, randomD])
@@ -156,5 +127,41 @@ def power2D(rawImages):
 
     display(HBox([VBox([ensembleSize, svdSelector, standInputs, randInputs, adaptiveInputs, minPowerSlider]), bloodOut, powerDopplerOut]))
 
+
+    def update(tissue_threshold, noise_threshold, maxMag, minMag, sigma, svdMode):
+        if svdMode == 'Standard':
+            standInputs.layout.display = 'flex'
+            randInputs.layout.display = 'none'
+            adaptiveInputs.layout.display = 'none'
+        elif svdMode == 'Random':
+            standInputs.layout.display = 'none'
+            randInputs.layout.display = 'flex'
+            adaptiveInputs.layout.display = 'none'
+        else:
+            standInputs.layout.display = 'none'
+            randInputs.layout.display = 'none'
+            adaptiveInputs.layout.display = 'flex'
+        with bloodOut:
+            bloodOut.clear_output(wait=True)
+            plt.figure(figsize=(5, 5))
+            filteredImages = reconstructSVD(U, S, Vh, tissue_threshold, noise_threshold, shape)
+            plt.title('Filtered Blood Signal')
+            plt.imshow(makeFlow(filteredImages[0:16], maxMag, 0, sigma))
+            plt.show()
+        with powerDopplerOut:
+            powerDopplerOut.clear_output(wait=True)
+            bmodeArray = makeBmode(rawImages)
+            plt.figure(figsize=(5, 5))
+            plt.title('Power Doppler')
+            plt.imshow(bmodeArray, cmap='grey')
+            rgbaFlow = makeFlow(filteredImages[0:16], maxMag, minMag, sigma)
+            plt.imshow(rgbaFlow)
+            plt.show()
+    interactive_output(update, {'tissue_threshold': tissueSlider, 'noise_threshold': noiseSlider, 'maxMag': maxPowerSlider, 'minMag': minPowerSlider, 'sigma':sigmaSlider, 'svdMode':svdSelector})
+
 def power3D():
     return
+
+
+rawImages = np.load('sample_data.npy')
+power2D(rawImages)
