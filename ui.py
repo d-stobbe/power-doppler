@@ -10,6 +10,8 @@ powerDopplerOut = Output()
 standardSVDOutput = Output()
 
 def power2D(rawImages):
+    shape = rawImages.shape
+    U, S, Vh = standardSVD(rawImages)
     def update(tissue_threshold, noise_threshold, maxMag, minMag, sigma, svdMode):
         if svdMode == 'Standard':
             standInputs.layout.display = 'flex'
@@ -26,7 +28,7 @@ def power2D(rawImages):
         with bloodOut:
             bloodOut.clear_output(wait=True)
             plt.figure(figsize=(5, 5))
-            filteredImages = reconstructSVD(tissue_threshold, noise_threshold)
+            filteredImages = reconstructSVD(U, S, Vh, tissue_threshold, noise_threshold, shape)
             plt.title('Filtered Blood Signal')
             plt.imshow(makeFlow(filteredImages[0:16], maxMag, 0, sigma))
             plt.show()
