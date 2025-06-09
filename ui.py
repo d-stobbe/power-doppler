@@ -125,9 +125,6 @@ def power2D(rawImages):
 
     adaptiveInputs = VBox([adaptiveBlockSize, adaptiveBlockOverlap, adaptiveTissueThreshold, adaptiveNoiseThreshold])
 
-    display(HBox([VBox([ensembleSize, svdSelector, standInputs, randInputs, adaptiveInputs, minPowerSlider]), bloodOut, powerDopplerOut]))
-
-
     def update(tissue_threshold, noise_threshold, maxMag, minMag, sigma, svdMode):
         if svdMode == 'Standard':
             standInputs.layout.display = 'flex'
@@ -158,6 +155,7 @@ def power2D(rawImages):
             plt.imshow(rgbaFlow)
             plt.show()
     interactive_output(update, {'tissue_threshold': tissueSlider, 'noise_threshold': noiseSlider, 'maxMag': maxPowerSlider, 'minMag': minPowerSlider, 'sigma':sigmaSlider, 'svdMode':svdSelector})
+    return (HBox([VBox([ensembleSize, svdSelector, standInputs, randInputs, adaptiveInputs, minPowerSlider]), bloodOut, powerDopplerOut]))
 
 def power3D():
     return
