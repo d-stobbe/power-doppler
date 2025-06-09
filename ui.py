@@ -146,7 +146,7 @@ def power2D(rawImages):
             plt.figure(figsize=(5, 5))
             filteredImages = reconstructSVD(U, S, Vh, tissue_threshold, noise_threshold, shape)
             plt.title('Filtered Blood Signal')
-            plt.imshow(makeFlow(filteredImages[0:16], maxMag, 0, sigma))
+            plt.imshow(makeFlow(filteredImages, maxMag, 0, sigma))
             plt.show()
         with powerDopplerOut:
             powerDopplerOut.clear_output(wait=True)
@@ -154,14 +154,10 @@ def power2D(rawImages):
             plt.figure(figsize=(5, 5))
             plt.title('Power Doppler')
             plt.imshow(bmodeArray, cmap='grey')
-            rgbaFlow = makeFlow(filteredImages[0:16], maxMag, minMag, sigma)
+            rgbaFlow = makeFlow(filteredImages, maxMag, minMag, sigma)
             plt.imshow(rgbaFlow)
             plt.show()
     interactive_output(update, {'tissue_threshold': tissueSlider, 'noise_threshold': noiseSlider, 'maxMag': maxPowerSlider, 'minMag': minPowerSlider, 'sigma':sigmaSlider, 'svdMode':svdSelector})
 
 def power3D():
     return
-
-
-rawImages = np.load('sample_data.npy')
-power2D(rawImages)

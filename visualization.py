@@ -4,7 +4,7 @@ from scipy.ndimage import gaussian_filter
 
 def makeBmode(images):
   # sum IQ data
-  averageBmode = np.mean(images, axis=0)
+  averageBmode = np.mean(images, axis=2)
   # envelope detection
   absBmode = np.abs(averageBmode)
   # logarithmic decomp
@@ -16,7 +16,7 @@ def makeBmode(images):
 def makeFlow(Filteredimages, maxMag, minMag, sigma):
   # sum the powers
   powerFlow = np.abs(Filteredimages)**2
-  averageFlow = powerFlow.mean(axis=0)
+  averageFlow = powerFlow.mean(axis=2)
   # averageFlow = 10*np.log10(averageFlow/np.max(averageFlow))
   maxMag = np.percentile(averageFlow, maxMag)
   # assume power above maxMag is tissue
