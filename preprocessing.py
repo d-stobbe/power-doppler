@@ -2,6 +2,7 @@
 from scipy.io import loadmat
 import numpy as np
 from scipy.stats import linregress
+from scipy.signal import firwin
 
 def standardSVD(rawImages):
     numFrames = rawImages.shape[-1]
@@ -121,3 +122,13 @@ def reconstructSVD(U, S, Vh, tissueThreshold, noiseThreshold, rawShape):
 #         filtedSubmatrix = submatrix # do svd here
 #         filteredIm[row_indices, :] = filtedSubmatrix # reconstruction
 #     return filteredIm
+
+def lowpassFilter(numtaps, cutoff):
+    return firwin(numtaps, cutoff, pass_zero=True)
+
+def highpassFilter(numtaps, cutoff):
+    return firwin(numtaps, cutoff, pass_zero=True)
+
+def bandpassFilter(numtaps, cutoff):
+    return firwin(numtaps, cutoff, pass_zero=False)
+

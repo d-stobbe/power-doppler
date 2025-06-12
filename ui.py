@@ -3,6 +3,7 @@ from IPython.display import display
 import matplotlib.pyplot as plt
 import numpy as np
 import pyvista as pv
+import time
 
 from preprocessing import standardSVD, randomSVD, adaptiveSVD, reconstructSVD
 from visualization import makeBmode, makeFlow, plotBlood, plotPowerDoppler
@@ -114,11 +115,10 @@ def power2D(rawImages):
         layout=Layout(width='400px')
     )
 
-    svdSelector = ToggleButtons(
-        options=['Standard','Random', 'Adaptive'],
-        description='SVD Mode:',
+    filterSelector = Dropdown(
+        options=['Standard SVD', 'Random SVD', 'Adaptive SVD', 'Spectral Filter'],
+        description='Filter Mode:',
         button_style='',
-        tooltips=['Randomized decomposition', 'Basic SVD', 'Adaptive approach'],
         continuous_update=False
     )
 
@@ -203,30 +203,30 @@ def power2D(rawImages):
         bloodOut.clear_output(wait=False)
         powerDopplerOut.clear_output(wait=False)
         loadButton.value = False
-        if change['new'] == 'Standard':
+        if change['new'] == 'Standard SVD':
             standInputs.layout.display = 'flex'
             randInputs.layout.display = 'none'
             adaptiveInputs.layout.display = 'none'
-        elif change['new'] == 'Random':
+        elif change['new'] == 'Random SVD':
             standInputs.layout.display = 'none'
             randInputs.layout.display = 'flex'
             adaptiveInputs.layout.display = 'none'
-        else:
+        elif change['new'] == 'Adaptive SVD':
             standInputs.layout.display = 'none'
             randInputs.layout.display = 'none'
             adaptiveInputs.layout.display = 'flex'
 
     def loadPrev(change):
-        svdMode = svdSelector.value
+        svdMode = filterSelector.value
         if change['new']:
-            if svdMode == 'Standard':
+            if svdMode == 'Standard SVD':
                 thresholdSlider.value = standard.thresholds
                 ensembleSize.value = standard.ensemble
                 minPowerSlider.value = standard.minMag
                 maxPowerSlider.value = standard.maxMag
                 sigmaSlider.value = standard.sigma
                 displayPlots(standard.maxMag, standard.minMag, standard.sigma, thresholds=standard.thresholds)
-            elif svdMode == 'Random':
+            elif svdMode == 'Random SVD':
                 ensembleSize.value = random.ensemble
                 randomK.value = random.k
                 randomD.value = random.d
@@ -235,7 +235,7 @@ def power2D(rawImages):
                 maxPowerSlider.value = random.maxMag
                 sigmaSlider.value = random.sigma
                 displayPlots(random.maxMag, random.minMag, random.sigma)
-            else:
+            elif svdMode == 'Adaptive SVD':
                 ensembleSize.value = adaptive.ensemble
                 adaptiveBlockSize.value = adaptive.blockSize
                 adaptiveBlockOverlap.value = adaptive.blockOverlap
@@ -255,28 +255,28 @@ def power2D(rawImages):
     def filter(b):
         if not loadButton.value:
             ensemble = rawImages[:, :, ensembleSize.value[0]:ensembleSize.value[1]]
-            svdMode = svdSelector.value
-            if svdMode == 'Standard':
+            svdMode = filterSelector.value
+            if svdMode == 'Standard SVD':
                 standard.filter(ensemble, thresholdSlider.value, minPowerSlider.value, maxPowerSlider.value, sigmaSlider.value, ensembleSize.value)
                 displayPlots(standard.maxMag, standard.minMag, standard.sigma, thresholds=standard.thresholds)
-            elif svdMode == 'Random':
+            elif svdMode == 'Random SVD':
                 random.filter(ensemble, minPowerSlider.value, maxPowerSlider.value, sigmaSlider.value, randomK.value, randomD.value, randomIters.value, ensembleSize.value)
                 displayPlots(random.maxMag, random.minMag, random.sigma)
-            else:
+            elif svdMode == 'Adaptive SVD':
                 adaptive.filter(ensemble, minPowerSlider.value, maxPowerSlider.value, sigmaSlider.value, adaptiveTissueThreshold.value, adaptiveNoiseThreshold.value, adaptiveBlockSize.value, adaptiveBlockOverlap.value, ensembleSize.value)
                 displayPlots(adaptive.maxMag, adaptive.minMag, adaptive.sigma)
             loadButton.value = True
 
     def displayPlots(maxMag, minMag, sigma, **kwargs):
         ensemble = rawImages[:, :, ensembleSize.value[0]:ensembleSize.value[1]]
-        if svdSelector.value == 'Standard':
+        if filterSelector.value == 'Standard SVD':
             thresholds = kwargs.get('thresholds')
             standard.reconstruct(thresholds, minMag, maxMag, sigma, standard.shape)
             filteredImages = standard.filteredImages
-        elif svdSelector.value == 'Random':
+        elif filterSelector.value == 'Random SVD':
             random.update(minMag, maxMag, sigma)
             filteredImages = random.filteredImages
-        else:
+        elif filterSelector.value == 'Adaptive SVD':
             adaptive.update(minMag, maxMag, sigma)
             filteredImages = adaptive.filteredImages
             
@@ -305,7 +305,7 @@ def power2D(rawImages):
                 thresholds=thresholdSlider.value
             )
 
-    svdSelector.observe(toggleMode, names='value')
+    filterSelector.observe(toggleMode, names='value')
     ensembleSize.observe(changeSize, names='value')
     filterButton.on_click(filter)
     loadButton.observe(loadPrev, names='value')
@@ -328,9 +328,10 @@ def power2D(rawImages):
     randInputs.layout.display = 'none'
     adaptiveInputs.layout.display = 'none'
 
-    display(HBox([VBox([svdSelector, svdParams, HBox([filterButton, loadButton]), reconParams]), bloodOut, powerDopplerOut]))
+    display(HBox([VBox([filterSelector, svdParams, HBox([filterButton, loadButton]), reconParams]), bloodOut, powerDopplerOut]))
 
 def power3D(data, spacing, origin):
+    print(pv.Report())
     mag = np.abs(data)
     log_env = 20*np.log10(mag/(np.max(mag)+1e-8))
     log_env[log_env < -40] = -40
@@ -373,19 +374,16 @@ def power3D(data, spacing, origin):
     def sliceChange(change):
         print('test')
         if change['owner'].axis == 'x':
-            print('x')
             x_index = change['new']
             origin_x = origin[0] + x_index * spacing[0]
             new_slice = grid.slice(normal='x', origin=(origin_x, 0, 0))
             slice1.mapper.dataset.deep_copy(new_slice)
         elif change['owner'].axis == 'y':
-            print('y')
             y_index = change['new']
             origin_y = origin[1] + y_index * spacing[1]
             new_slice = grid.slice(normal='y', origin=(0, origin_y, 0))
             slice2.mapper.dataset.deep_copy(new_slice)
         else:
-            print('z')
             z_index = change['new']
             origin_z = origin[2] + z_index * spacing[2]
             new_slice = grid.slice(normal='z', origin=(0, 0, origin_z))
@@ -407,7 +405,7 @@ def power3D(data, spacing, origin):
     slice2 = p.add_mesh(sl2, cmap='gray', clim=[0, 1])
     slice3 = p.add_mesh(sl3, cmap='gray', clim=[0, 1])
     volume = p.add_volume(grid, cmap='gray_r', clim=[0, 1])
-    p.show(jupyter_backend='trame')
+    p.show()
 
     sliceSlider1.observe(sliceChange, names='value')
     sliceSlider2.observe(sliceChange, names='value')
@@ -452,3 +450,18 @@ def power3D(data, spacing, origin):
     hideS3.observe(toggleVis, names='value')
 
     display(VBox([sliceSlider1, sliceSlider2, sliceSlider3, HBox([hideVol, hideS1, hideS2, hideS3])]))
+
+def test():
+
+    mesh = pv.Sphere()
+    plotter = pv.Plotter()
+    plotter.add_mesh(mesh, color='lightblue')
+    plane = plotter.add_mesh_clip_plane(mesh)
+
+    plotter.show()
+
+    for z in range(-1, 2):
+        print('test')
+        plane.origin = (0, 0, z)  
+        plotter.render()        
+    
