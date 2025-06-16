@@ -1,8 +1,7 @@
 #load data
-from scipy.io import loadmat
 import numpy as np
 from scipy.stats import linregress
-from scipy.signal import firwin
+from scipy.signal import firwin, butter, cheby1, lfiltic, lfilter
 
 def standardSVD(rawImages):
     numFrames = rawImages.shape[-1]
@@ -123,12 +122,122 @@ def reconstructSVD(U, S, Vh, tissueThreshold, noiseThreshold, rawShape):
 #         filteredIm[row_indices, :] = filtedSubmatrix # reconstruction
 #     return filteredIm
 
-def lowpassFilter(numtaps, cutoff):
-    return firwin(numtaps, cutoff, pass_zero=True)
+def IIR(data, order, fcutoff, initialization):
+    if order==0:
+        return data
+    
+    ensembleSize = data.shape[-1]
 
-def highpassFilter(numtaps, cutoff):
-    return firwin(numtaps, cutoff, pass_zero=True)
+    (b, a) = butter(order, fcutoff, 'highpass')
+    F = np.zeros((order, order))
+    if order >= 2:
+        for n in range(1, order):
+            F[n-1, n] = 1
+    F[order-1, :] = -a[:order]
+    g = b[:order] - b[order]*a[:order]
+    g = np.reshape(g, (-1, 1))
+    q = np.zeros((order, 1))
+    q[-1, 0] = 1
 
-def bandpassFilter(numtaps, cutoff):
-    return firwin(numtaps, cutoff, pass_zero=False)
+    B = np.zeros((ensembleSize, order))
+    F_power = np.eye(order)
+    for n in range(ensembleSize):
+        B[n, :] = (g.T@F_power).flatten()
+        F_power = F_power@F
+    
+    C = np.zeros((ensembleSize, ensembleSize))
+    C[0, 0] = b[order]
+    F_power = np.eye(order)
+    for n in range(ensembleSize - 1):
+        C[n+1, 0] = (g.T @ F_power @ q).item()
+        F_power = F_power @ F
+    
+    for n in range(1, ensembleSize):
+        C[n:, n] = C[0:ensembleSize-n, 0]
+    
+    if initialization == 'projection':
+        coef = (np.eye(C.shape[0]) - B @ np.linalg.pinv(B.T @ B) @B.T) @C
 
+    elif initialization == 'step':
+        L = np.zeros((1, ensembleSize))
+        L[0, 0] = 1
+        coef = B @ np.linalg.pinv(np.eye(F.shape[0])-F)@ q @ L + C
+    elif initialization == 'zero':
+        coef = C
+    
+    output = np.zeros_like(data)
+
+    for m in range(0, data.shape[0]):
+        for n in range(0, data.shape[1]):
+            output[m, n, :] = coef @ data[m, n, :]
+
+    return output
+
+def regression(data, order): 
+
+    ensembleSize = data.shape[-1]
+    dataRange = np.arange(1, ensembleSize+1)
+    A = np.vstack([dataRange**n for n in range(order+1)])
+    A2 = np.linalg.pinv(A@A.T)@A
+    output = np.zeros_like(data)
+
+    for i in range(data.shape[1]):
+        for j in range(data.shape[0]):
+            x = data[j, i, :]
+            coeffs = A2 @ x
+            trend = coeffs @ A
+            output[j, i, :] = trend
+    
+    return data - output
+
+def butterworth(data, order, cutoff):
+    (b, a) = butter(order, cutoff, 'highpass')
+    return highpass(data, b, a, order)
+
+def chbychv(data, order, cutoff, rolloff):
+    (b, a) = cheby1(order, rolloff, cutoff, 'highpass')
+    return highpass(data, b, a, order)
+
+def FIR(data, order, cutoff):
+    b = firwin(order+1, cutoff, pass_zero=False)
+    return lfilter(b, [1.0], data, axis=2) 
+
+def highpass(data, b, a, order):
+    shape = data.shape
+    zi = np.zeros((order, shape[0], shape[1]))
+    output = np.zeros_like(data)
+    for depth in range(shape[0]):
+        for ensemble in range(shape[1]):
+            zi_vec = lfiltic(b, a, y=np.zeros(order), x=data[depth, ensemble, 0]*np.ones(order))
+            zi[:, depth, ensemble] = zi_vec
+            output[depth, ensemble, :],_ = lfilter(b, a, data[depth, ensemble, :], zi_vec)
+    return output
+
+def velEst(data, fc, fprf):
+    c = 1540
+    vAxial = np.zeros(data.shape[:-1])
+    
+    data_shifted_1 = data[:, :, :-1]
+    data_shifted_2 = data[:, :, 1:]
+
+    autocorr = data_shifted_2 * data_shifted_1.conj()
+
+    sum_imag = np.sum(np.imag(autocorr), axis=2)
+    sum_real = np.sum(np.real(autocorr), axis=2)
+
+    vAxial = (c * fprf) / (4 * np.pi *fc * 1e6) * np.arctan2(sum_imag, sum_real)
+    return vAxial
+
+def velFilt(data, fc, fprf, velThresh):
+    c = 1540
+    vAxial = velEst(data, fc, fprf)
+    maxVel = (c * fprf) / (4 * fc * 1e6)
+    vAxialFilt = vAxial
+    vAxialFilt = vAxialFilt*(np.abs(vAxialFilt)>maxVel*velThresh)
+    return vAxialFilt
+
+def tissueFilt(data, powerPre, tissueThresh):
+    return data * (powerPre < (1-tissueThresh))
+
+def clutterFilt(data, powerPost, clutterThresh):
+    return data * (powerPost > (clutterThresh))
