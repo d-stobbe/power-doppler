@@ -1,9 +1,12 @@
 #load data
 import numpy as np
 from scipy.stats import linregress
-from scipy.signal import firwin, butter, cheby1, lfiltic, lfilter
+from scipy.signal import firwin, butter, cheby1, lfiltic, lfilter, resample_poly
+
+# FILTERING
 
 def standardSVD(rawImages):
+    # works for 2D x ensemble or 3D x ensemble
     numFrames = rawImages.shape[-1]
     flatImages = np.reshape(rawImages, (-1, numFrames), order='F')
     return np.linalg.svd(flatImages, full_matrices=False) # returns U, S, Vh
@@ -96,31 +99,12 @@ def adaptiveSVD(rawImages, tissueThreshold, noiseThreshold, blockSize, blockOver
     return filteredImages
 
 def reconstructSVD(U, S, Vh, tissueThreshold, noiseThreshold, rawShape):
-    S_filtered = S.copy()
-    S_filtered[0:tissueThreshold+1] = 0
+    S_filtered = S
+    S_filtered[0:tissueThreshold] = 0
     S_filtered[noiseThreshold:len(S_filtered)] = 0
     filteredImages = U@np.diag(S_filtered)@Vh
     filteredImages = np.reshape(filteredImages, rawShape, order='F')
     return filteredImages
-
-# def randomDownsample(rawImages, nBases):
-#     numFrames = rawImages.shape[-1]
-#     flatImages = np.reshape(rawImages, (-1, numFrames), order='F')
-#     nBases = 16
-#     xy, t = flatImages.shape
-
-#     rand_rows = np.random.permutation(xy)
-
-#     split_rows = np.array_split(rand_rows, nBases)
-
-#     filteredIm = np.zeros((xy, t), dtype='complex128')
-
-#     for i in range(nBases):
-#         row_indices = split_rows[i]
-#         submatrix = flatImages[row_indices, :]
-#         filtedSubmatrix = submatrix # do svd here
-#         filteredIm[row_indices, :] = filtedSubmatrix # reconstruction
-#     return filteredIm
 
 def IIR(data, order, fcutoff, initialization):
     if order==0:
@@ -159,35 +143,49 @@ def IIR(data, order, fcutoff, initialization):
         coef = (np.eye(C.shape[0]) - B @ np.linalg.pinv(B.T @ B) @B.T) @C
 
     elif initialization == 'step':
-        L = np.zeros((1, ensembleSize))
-        L[0, 0] = 1
+        L = np.zeros(ensembleSize)
+        L[0] = 1
         coef = B @ np.linalg.pinv(np.eye(F.shape[0])-F)@ q @ L + C
     elif initialization == 'zero':
         coef = C
     
     output = np.zeros_like(data)
-
-    for m in range(0, data.shape[0]):
-        for n in range(0, data.shape[1]):
-            output[m, n, :] = coef @ data[m, n, :]
+    if len(data.shape) == 3:
+        for m in range(data.shape[0]):
+            for n in range(data.shape[1]):
+                output[m, n, :] = coef @ data[m, n, :]
+    else: 
+        for m in range(data.shape[0]):
+            for n in range(data.shape[1]):
+                for o in range(data.shape[2]):
+                    output[m, n, o, :] = coef @ data[m, n, o, :]
+    
 
     return output
 
 def regression(data, order): 
-
     ensembleSize = data.shape[-1]
     dataRange = np.arange(1, ensembleSize+1)
     A = np.vstack([dataRange**n for n in range(order+1)])
     A2 = np.linalg.pinv(A@A.T)@A
     output = np.zeros_like(data)
-
-    for i in range(data.shape[1]):
-        for j in range(data.shape[0]):
-            x = data[j, i, :]
-            coeffs = A2 @ x
-            trend = coeffs @ A
-            output[j, i, :] = trend
     
+    if len(data.shape) == 3:
+        for i in range(data.shape[1]):
+            for j in range(data.shape[0]):
+                x = data[j, i, :]
+                coeffs = A2 @ x
+                trend = coeffs @ A
+                output[j, i, :] = trend
+    else:
+        for k in range(data.shape[2]):
+            for i in range(data.shape[1]):
+                for j in range(data.shape[0]):
+                    x = data[j, i, k, :]
+                    coeffs = A2 @ x
+                    trend = coeffs @ A
+                    output[j, i, k, :] = trend
+
     return data - output
 
 def butterworth(data, order, cutoff):
@@ -199,7 +197,7 @@ def chbychv(data, order, cutoff, rolloff):
     return highpass(data, b, a, order)
 
 def FIR(data, order, cutoff):
-    b = firwin(order+1, cutoff, pass_zero=False)
+    b = firwin(order, cutoff, pass_zero=False)
     return lfilter(b, [1.0], data, axis=2) 
 
 def highpass(data, b, a, order):
@@ -210,7 +208,7 @@ def highpass(data, b, a, order):
         for ensemble in range(shape[1]):
             zi_vec = lfiltic(b, a, y=np.zeros(order), x=data[depth, ensemble, 0]*np.ones(order))
             zi[:, depth, ensemble] = zi_vec
-            output[depth, ensemble, :],_ = lfilter(b, a, data[depth, ensemble, :], zi_vec)
+            output[depth, ensemble, :],_ = lfilter(b, a, data[depth, ensemble, :], zi=zi_vec)
     return output
 
 def velEst(data, fc, fprf):
@@ -241,3 +239,33 @@ def tissueFilt(data, powerPre, tissueThresh):
 
 def clutterFilt(data, powerPost, clutterThresh):
     return data * (powerPost > (clutterThresh))
+
+# DOWNSAMPLING
+
+def randomDownsample(rawImages, nBases):
+    numFrames = rawImages.shape[-1]
+    flatImages = np.reshape(rawImages, (-1, numFrames), order='F')
+    nBases = 16
+    xy, t = flatImages.shape
+
+    rand_rows = np.random.permutation(xy)
+
+    split_rows = np.array_split(rand_rows, nBases)
+
+    filteredIm = np.zeros((xy, t), dtype='complex128')
+
+    for i in range(nBases):
+        row_indices = split_rows[i]
+        submatrix = flatImages[row_indices, :]
+        filtedSubmatrix = submatrix # do svd here
+        filteredIm[row_indices, :] = filtedSubmatrix # reconstruction
+    return filteredIm
+
+def decimate(rawImages, D):
+    return rawImages[::D, :, :]
+
+def interpolate(rawImages, ID):
+    return resample_poly(rawImages, up=ID, down=1, axis=1)
+
+# Comments for filtering methods
+# 3D conversion
