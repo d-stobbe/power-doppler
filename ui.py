@@ -3,7 +3,6 @@ from IPython.display import display
 import matplotlib.pyplot as plt
 import numpy as np
 import pyvista as pv
-import time
 
 from preprocessing import standardSVD, randomSVD, adaptiveSVD, reconstructSVD
 from visualization import makeBmode, makeFlow, plotBlood, plotPowerDoppler
@@ -100,7 +99,7 @@ def power2D(rawImages):
     )
 
     minPowerSlider = FloatSlider(
-        min=0, max=100, step=0.5, value=0,
+        min=0, max=100, step=0.5, value=100,
         description='Min Power:',
         continuous_update=False,
         # style={'description_width': '130px'},
@@ -123,28 +122,28 @@ def power2D(rawImages):
     )
 
     randomK = IntSlider(
-        min=0, max=256, step=1, value=256,
+        min=0, max=maxEnsemble, step=1, value=maxEnsemble,
         description='k:',
         continuous_update=False,
         style={'description_width': '130px'}
     )
 
     randomIters = IntSlider(
-        min=0, max=256, step=1, value=256,
+        min=0, max=2, step=1, value=2,
         description='Power Iters:',
         continuous_update=False,
         style={'description_width': '130px'}
     )
 
     randomD = IntSlider(
-        min=0, max=256, step=1, value=256,
+        min=0, max=2, step=1, value=2,
         description='d:',
         continuous_update=False,
         style={'description_width': '130px'}
     )
 
     adaptiveBlockSize = IntSlider(
-        min=0, max=256, step=1, value=256,
+        min=0, max=min(rawImages.shape[0], rawImages.shape[1]), step=1, value=min(rawImages.shape[0], rawImages.shape[1]),
         description='Block Size:',
         continuous_update=False,
         style={'description_width': '130px'}
@@ -194,10 +193,13 @@ def power2D(rawImages):
 
     def changeSize(change):
         thresholdSlider.unobserve(sliderChange, names='value')
+        randomK.unobserve(sliderChange, names='value')
         thresholdSlider.min = 0
         thresholdSlider.max = change['new'][1] - change['new'][0]
         thresholdSlider.value = [0, change['new'][1] - change['new'][0]]
+        randomK.max = change['new'][1] - change['new'][0]
         thresholdSlider.observe(sliderChange, names='value')
+        randomK.observe(sliderChange, names='value')
 
     def toggleMode(change):
         bloodOut.clear_output(wait=False)
@@ -205,16 +207,16 @@ def power2D(rawImages):
         loadButton.value = False
         if change['new'] == 'Standard SVD':
             standInputs.layout.display = 'flex'
-            randInputs.layout.display = 'none'
-            adaptiveInputs.layout.display = 'none'
+            # randInputs.layout.display = 'none'
+            # adaptiveInputs.layout.display = 'none'
         elif change['new'] == 'Random SVD':
             standInputs.layout.display = 'none'
-            randInputs.layout.display = 'flex'
-            adaptiveInputs.layout.display = 'none'
+            # randInputs.layout.display = 'flex'
+            # adaptiveInputs.layout.display = 'none'
         elif change['new'] == 'Adaptive SVD':
             standInputs.layout.display = 'none'
-            randInputs.layout.display = 'none'
-            adaptiveInputs.layout.display = 'flex'
+            # randInputs.layout.display = 'none'
+            # adaptiveInputs.layout.display = 'flex'
 
     def loadPrev(change):
         svdMode = filterSelector.value
@@ -283,16 +285,16 @@ def power2D(rawImages):
         bloodOut.clear_output(wait=True)
         with bloodOut:
             plt.figure(figsize=(5, 5))
-            plt.title('Filtered Blood Signal')
-            plt.imshow(makeFlow(filteredImages, maxMag, 0, sigma))
+            plt.title('Power Blood Signal')
+            plt.imshow(makeFlow(filteredImages, 0, sigma, 20))
             plt.show()
         powerDopplerOut.clear_output(wait=True)
         with powerDopplerOut:
             bmodeArray = makeBmode(ensemble)
             plt.figure(figsize=(5, 5))
-            plt.title('Power Doppler')
+            plt.title('Bmode')
             plt.imshow(bmodeArray, cmap='grey')
-            rgbaFlow = makeFlow(filteredImages, maxMag, minMag, sigma)
+            rgbaFlow = makeFlow(filteredImages, minMag, sigma, 20)
             plt.imshow(rgbaFlow)
             plt.show()
 
@@ -305,7 +307,7 @@ def power2D(rawImages):
                 thresholds=thresholdSlider.value
             )
 
-    filterSelector.observe(toggleMode, names='value')
+    # filterSelector.observe(toggleMode, names='value')
     ensembleSize.observe(changeSize, names='value')
     filterButton.on_click(filter)
     loadButton.observe(loadPrev, names='value')
@@ -314,29 +316,32 @@ def power2D(rawImages):
     sigmaSlider.observe(sliderChange, names='value')
     thresholdSlider.observe(sliderChange, names='value')
 
-    randInputs = VBox([randomK, randomIters, randomD])
+    # randInputs = VBox([randomK, randomIters, randomD])
 
-    adaptiveInputs = VBox([adaptiveBlockSize, adaptiveBlockOverlap, adaptiveTissueThreshold, adaptiveNoiseThreshold])
+    # adaptiveInputs = VBox([adaptiveBlockSize, adaptiveBlockOverlap, adaptiveTissueThreshold, adaptiveNoiseThreshold])
 
-    svdParams = VBox([ensembleSize, randInputs, adaptiveInputs])
+    # svdParams = VBox([ensembleSize, randInputs, adaptiveInputs])
+    svdParams = VBox([ensembleSize])
 
     standInputs = VBox([thresholdSlider])
 
-    reconParams = VBox([standInputs, sigmaSlider, maxPowerSlider, minPowerSlider])
+    reconParams = VBox([standInputs, sigmaSlider, minPowerSlider])
 
     standInputs.layout.display = 'flex'
-    randInputs.layout.display = 'none'
-    adaptiveInputs.layout.display = 'none'
+    # randInputs.layout.display = 'none'
+    # adaptiveInputs.layout.display = 'none'
 
-    display(HBox([VBox([filterSelector, svdParams, HBox([filterButton, loadButton]), reconParams]), bloodOut, powerDopplerOut]))
+        # display(HBox([VBox([filterSelector, svdParams, HBox([filterButton, loadButton]), reconParams]), bloodOut, powerDopplerOut]))
+
+    display(HBox([VBox([svdParams, HBox([filterButton, loadButton]), reconParams]), bloodOut, powerDopplerOut]))
 
 def power3D(data, spacing, origin):
     print(pv.Report())
-    mag = np.abs(data)
-    log_env = 20*np.log10(mag/(np.max(mag)+1e-8))
-    log_env[log_env < -40] = -40
+    # mag = np.abs(data)
+    log_env = 10*np.log10(data/np.max(data)+1e-8)
+    log_env[log_env < -20] = -20
     bmodeArray = log_env
-    bmodeArray = (log_env+40)/40
+    # bmodeArray = (log_env+20)/20
     # bmodeArray /= 2
     grid = pv.ImageData()
     grid.dimensions = bmodeArray.shape
@@ -372,7 +377,6 @@ def power3D(data, spacing, origin):
     sliceSlider3.axis = 'z'
 
     def sliceChange(change):
-        print('test')
         if change['owner'].axis == 'x':
             x_index = change['new']
             origin_x = origin[0] + x_index * spacing[0]
@@ -401,10 +405,10 @@ def power3D(data, spacing, origin):
     sl1 = grid.slice(normal='x', origin=(origin_x, 0, 0))
     sl2 = grid.slice(normal='y', origin=(0, origin_y, 0))
     sl3 = grid.slice(normal='z', origin=(0, 0, origin_z))
-    slice1 = p.add_mesh(sl1, cmap='gray', clim=[0, 1])
-    slice2 = p.add_mesh(sl2, cmap='gray', clim=[0, 1])
-    slice3 = p.add_mesh(sl3, cmap='gray', clim=[0, 1])
-    volume = p.add_volume(grid, cmap='gray_r', clim=[0, 1])
+    slice1 = p.add_mesh(sl1, cmap='hot', clim=[-20, 0])
+    slice2 = p.add_mesh(sl2, cmap='hot', clim=[-20, 0])
+    slice3 = p.add_mesh(sl3, cmap='hot', clim=[-20, 0])
+    volume = p.add_volume(grid, cmap='hot', clim=[-20, 0])
     p.show()
 
     sliceSlider1.observe(sliceChange, names='value')
@@ -451,17 +455,4 @@ def power3D(data, spacing, origin):
 
     display(VBox([sliceSlider1, sliceSlider2, sliceSlider3, HBox([hideVol, hideS1, hideS2, hideS3])]))
 
-def test():
-
-    mesh = pv.Sphere()
-    plotter = pv.Plotter()
-    plotter.add_mesh(mesh, color='lightblue')
-    plane = plotter.add_mesh_clip_plane(mesh)
-
-    plotter.show()
-
-    for z in range(-1, 2):
-        print('test')
-        plane.origin = (0, 0, z)  
-        plotter.render()        
     

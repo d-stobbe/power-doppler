@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter
+from matplotlib.colors import ListedColormap, Normalize
 
 def makeBmode(images):
   # sum IQ data
@@ -8,33 +9,29 @@ def makeBmode(images):
   # envelope detection
   absBmode = np.abs(averageBmode)
   # logarithmic decomp
-  log_env = 20*np.log10(absBmode/np.max(absBmode))
+  log_env = 20*np.log10(absBmode/np.max(absBmode)+1e-8)
   log_env[log_env < -40] = -40
   BmodeArray = log_env
   return BmodeArray
 
-def makeFlow(Filteredimages, maxMag, minMag, sigma):
-  # sum the powers
-  powerFlow = np.abs(Filteredimages)**2
-  averageFlow = powerFlow.mean(axis=2)
-  # averageFlow = 10*np.log10(averageFlow/np.max(averageFlow))
-  maxMag = np.percentile(averageFlow, maxMag)
-  # assume power above maxMag is tissue
-  averageFlow[averageFlow > maxMag] = 0
+def makeFlow(Filteredimages, minMag, sigma, dynrange):
 
-  averageFlow = gaussian_filter(averageFlow, sigma=sigma, mode='constant')
+  pwr = np.abs(Filteredimages)**2
+  flowArray = np.mean(pwr, axis=-1)
+  flowArray = 10*np.log10(flowArray/np.max(flowArray)+1e-8)
+  flowArray[flowArray < -dynrange] = -dynrange
 
-  flowArray = averageFlow
-
-  cmap = plt.get_cmap('autumn')
-  norm = plt.Normalize(np.min(flowArray), np.max(flowArray))
+  cmap = plt.get_cmap('hot')
+  norm = plt.Normalize(-dynrange, 0)
 
   rgbaFlow = cmap(norm(flowArray))
-  #thresholding to retrieve relevant blood signal
+
+  #thresholding for overlaying power doppler image onto bmode image
   minMag = np.percentile(flowArray, minMag)
   transparencyMap = (flowArray>=minMag)
 
   rgbaFlow[:, :, -1] = transparencyMap.astype(float)
+
   return rgbaFlow
 
 def plotBlood(powerIntensityMat, maxMag, sigma):

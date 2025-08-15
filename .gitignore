@@ -1,4 +1,4 @@
 venv/
 __pycache__/
-temp.ipynb
-test_data.npy
+*.npy
+*.mat
